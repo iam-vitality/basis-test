@@ -1,0 +1,10 @@
+.env
+.venv
+.uv-cache
+.uv-python
+.git
+.idea
+.pytest_cache
+__pycache__
+*.pyc
+*.egg-info

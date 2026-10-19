@@ -1,0 +1,69 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: payment
+      POSTGRES_PASSWORD: payment
+      POSTGRES_DB: payments
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payment -d payments"]
+      interval: 2s
+      retries: 30
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+  rabbitmq:
+    image: rabbitmq:3-management
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 2s
+      retries: 30
+    volumes:
+      - rabbit_mnesia_data:/var/lib/rabbitmq/mnesia
+  migrate:
+    build: .
+    env_file: .env
+    command: alembic upgrade head
+    depends_on:
+      postgres:
+        condition: service_healthy
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    command: python -m payment_service.main
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  consumer:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    command: python -m payment_service.consumer_main
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+  outbox-publisher:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    command: python -m payment_service.outbox_main
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+  demo-receiver:
+    build: .
+    env_file: .env
+    command: python -m payment_service.demo_receiver
+  checks:
+    build: .
+    profiles: ["checks"]
+    env_file: .env
+volumes:
+  postgres_data:
+  rabbit_mnesia_data:
